@@ -1,3 +1,4 @@
+local debug
 local joystick
 local planets
 local ship
@@ -6,7 +7,6 @@ local friction
 local trajectory
 local orbit
 local map
-local minimap
 local currentDestination
 local points
 
@@ -46,6 +46,7 @@ local function setNewDestination()
 end
 
 function love.load()
+  debug = false
   local joysticks = love.joystick.getJoysticks()
   joystick = joysticks[1]
 
@@ -57,15 +58,6 @@ function love.load()
     width = 8000,
     height = 2000
   }
-
-  minimap = {
-    y = 10,
-    width = 300
-  }
-
-  minimap.x = 800 - 10 - minimap.width
-  minimap.scale = minimap.width / map.width
-  minimap.height = minimap.scale * map.height
 
   planets = {
     {
@@ -307,9 +299,17 @@ function love.update(dt)
   end
 end
 
+function love.keypressed(key)
+  if key == "d" then
+    debug = not debug
+  elseif key == "q" then
+    love.event.quit()
+  end
+end
+
 function love.draw()
   lg.push()
-  lg.translate(-ship.position.x + 400, -ship.position.y + 300)
+  lg.translate(-ship.position.x + lg.getWidth() / 2, -ship.position.y + lg.getHeight() / 2)
   for planetIndex, planet in ipairs(planets) do
     lg.setColor(0, 1, 1)
     lg.circle("fill", planet.position.x, planet.position.y, planet.radius)
@@ -344,6 +344,15 @@ function love.draw()
   lg.pop()
 
   -- minimap
+  local minimap = {
+    y = 10,
+    width = lg.getWidth() / 3
+  }
+
+  minimap.x = lg.getWidth() - 10 - minimap.width
+  minimap.scale = minimap.width / map.width
+  minimap.height = minimap.scale * map.height
+
   lg.setColor(0, 0.2, 0.2, 0.5)
   lg.rectangle("fill", minimap.x, minimap.y, minimap.width, minimap.height)
   for planetIndex, planet in ipairs(planets) do
@@ -384,11 +393,13 @@ function love.draw()
   end
 
   -- debug
-  lg.setColor(1, 1, 1)
-  lg.print(table.concat({
-    "velocity: x = " .. ship.velocity.x .. ", y = " .. ship.velocity.y,
-    "orbiting: " .. (ship.orbiting and "true" or "false"),
-    "current destination points: " .. currentDestination.points,
-    "points: " .. points
-  }, "\n"))
+  if debug then
+    lg.setColor(1, 1, 1)
+    lg.print(table.concat({
+      "velocity: x = " .. ship.velocity.x .. ", y = " .. ship.velocity.y,
+      "orbiting: " .. (ship.orbiting and "true" or "false"),
+      "current destination points: " .. currentDestination.points,
+      "points: " .. points
+    }, "\n"))
+  end
 end
