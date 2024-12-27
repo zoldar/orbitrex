@@ -1,4 +1,5 @@
 local debug
+local fonts
 local joystick
 local planets
 local ship
@@ -9,6 +10,8 @@ local orbit
 local map
 local currentDestination
 local points
+local sounds
+local lowPointsThreshold
 
 local lg = love.graphics
 local lk = love.keyboard
@@ -26,6 +29,10 @@ end
 
 local function lerp(x, a, frac)
   return x + (a - x) * frac
+end
+
+local function clamp(min, val, max)
+  return math.max(min, math.min(val, max));
 end
 
 local function vangle(v1, v2)
@@ -46,11 +53,29 @@ local function setNewDestination()
 end
 
 function love.load()
-  debug = false
+  debug  = false
+
+  fonts  = {
+    label = lg.newFont(14),
+    value = lg.newFont(18)
+  }
+
+  sounds = {
+    burn = love.audio.newSource("assets/engine.wav", "static"),
+    oneup = love.audio.newSource("assets/oneup.wav", "static"),
+    warning = love.audio.newSource("assets/warning.wav", "static"),
+    timeout = love.audio.newSource("assets/timeout.wav", "static"),
+    bounce = love.audio.newSource("assets/bounce.wav", "static")
+  }
+  sounds.burn:setVolume(0)
+  sounds.burn:setLooping(true)
+  sounds.burn:play()
+
   local joysticks = love.joystick.getJoysticks()
   joystick = joysticks[1]
 
   points = 0
+  lowPointsThreshold = 400
   maxThrust = 105
   friction = 50
 
@@ -242,9 +267,13 @@ function love.update(dt)
   if now - currentDestination.start >= 3 then
     currentDestination.points = currentDestination.points - 100
     currentDestination.start = now
+    if currentDestination.points < lowPointsThreshold and currentDestination.points > 0 then
+      sounds.warning:play()
+    end
   end
 
   if currentDestination.points <= 0 then
+    sounds.timeout:play()
     setNewDestination()
   end
 
@@ -252,7 +281,13 @@ function love.update(dt)
   if lk.isDown("up") or (joystick and joystick:isDown(1)) or #touches > 0 then
     ship.thrust = lerp(ship.thrust, maxThrust, 0.1)
   else
-    ship.thrust = lerp(ship.thrust, 0, 0.8)
+    ship.thrust = lerp(ship.thrust, 0, 0.2)
+  end
+
+  if ship.thrust > 0.1 then
+    sounds.burn:setVolume(ship.thrust / maxThrust)
+  else
+    sounds.burn:setVolume(0)
   end
 
   if ship.orbiting then
@@ -273,8 +308,13 @@ function love.update(dt)
         y = planet.position.y - ship.position.y
       }
       local distance = math.sqrt(orbitVector.x ^ 2 + orbitVector.y ^ 2)
+      local approachAngle = vangle(orbitVector, ship.velocity)
+      local speed = math.sqrt(ship.velocity.x ^ 2 + ship.velocity.y ^ 2)
 
       if distance <= ship.radius + planet.radius + orbit then
+        if math.abs(approachAngle) < 10 and speed > 300 then
+          sounds.bounce:play()
+        end
         ship.orbiting = true
         ship.orbitingPlanet = planetIndex
         ship.velocity = {
@@ -283,6 +323,7 @@ function love.update(dt)
         }
         if planetIndex == currentDestination.planet then
           points = points + currentDestination.points
+          sounds.oneup:play()
           setNewDestination()
         end
         break
@@ -307,6 +348,20 @@ function love.keypressed(key)
   end
 end
 
+local function cullBy(entity, container)
+  local result = {
+    x = clamp(0, entity.x, container.width),
+    y = clamp(0, entity.y, container.height),
+    culled = false
+  }
+
+  if result.x ~= entity.x or result.y ~= entity.y then
+    result.culled = true
+  end
+
+  return result
+end
+
 function love.draw()
   lg.push()
   lg.translate(-ship.position.x + lg.getWidth() / 2, -ship.position.y + lg.getHeight() / 2)
@@ -328,11 +383,24 @@ function love.draw()
   lg.push()
   lg.translate(ship.position.x, ship.position.y)
   lg.rotate(velocityAngle)
+  lg.setColor(0.6, 0.6, 0.6)
+  lg.polygon(
+    "fill",
+    ship.radius, 0,
+    -ship.radius, -ship.radius,
+    -ship.radius, ship.radius
+  )
   lg.setColor(1, 0.2, 0)
   lg.ellipse("fill", 0, 0, ship.radius, ship.radius / 2)
   if ship.thrust > 0.1 then
     lg.setColor(1, 1, 0)
-    lg.ellipse("fill", -ship.radius - 8, 0, 8, 4)
+    lg.ellipse(
+      "fill",
+      -ship.radius - (ship.thrust / maxThrust) * 8,
+      0,
+      (ship.thrust / maxThrust) * 8,
+      (ship.thrust / maxThrust) * 4
+    )
   end
   lg.pop()
 
@@ -359,7 +427,7 @@ function love.draw()
     local show = true
     if planetIndex == currentDestination.planet then
       lg.setColor(1, 1, 0)
-      if math.sin(math.pi * lt.getTime() * 4) > 0 then
+      if currentDestination.points < lowPointsThreshold and math.sin(math.pi * lt.getTime() * 4) > 0 then
         show = false
       end
     else
@@ -373,26 +441,84 @@ function love.draw()
         minimap.y + planet.position.y * minimap.scale,
         2
       )
+
+      if planetIndex == currentDestination.planet then
+        lg.circle(
+          "line",
+          minimap.x + planet.position.x * minimap.scale,
+          minimap.y + planet.position.y * minimap.scale,
+          4
+        )
+      end
     end
   end
   lg.setColor(0, 1, 0)
-  lg.circle(
-    "fill",
-    minimap.x + ship.position.x * minimap.scale,
-    minimap.y + ship.position.y * minimap.scale,
-    2
-  )
+  local shipPosition = cullBy(ship.position, map)
+  if shipPosition.culled then
+    lg.polygon(
+      "fill",
+      minimap.x + shipPosition.x * minimap.scale - 4,
+      minimap.y + shipPosition.y * minimap.scale,
+
+      minimap.x + shipPosition.x * minimap.scale,
+      minimap.y + shipPosition.y * minimap.scale - 4,
+
+      minimap.x + shipPosition.x * minimap.scale + 4,
+      minimap.y + shipPosition.y * minimap.scale,
+
+      minimap.x + shipPosition.x * minimap.scale,
+      minimap.y + shipPosition.y * minimap.scale + 4
+    )
+  else
+    lg.circle(
+      "fill",
+      minimap.x + shipPosition.x * minimap.scale,
+      minimap.y + shipPosition.y * minimap.scale,
+      2
+    )
+  end
   lg.setColor(1, 1, 1)
   for sampleIndex, samplePoint in ipairs(trajectory) do
     if sampleIndex % 4 == 0 then
-      lg.points(
-        minimap.x + samplePoint.x * minimap.scale,
-        minimap.y + samplePoint.y * minimap.scale
-      )
+      local pointPosition = cullBy(samplePoint, map)
+      if not pointPosition.culled then
+        lg.points(
+          minimap.x + pointPosition.x * minimap.scale,
+          minimap.y + pointPosition.y * minimap.scale
+        )
+      end
     end
   end
 
+  local speed = math.floor(math.sqrt(
+    ship.velocity.x ^ 2 + ship.velocity.y ^ 2
+  ))
+
+  local scoreLabel = "SCORE: "
+  local nextLabel = "NEXT: "
+  local speedLabel = "SPEED: "
+  lg.setColor(1, 1, 1)
+  lg.setFont(fonts.label)
+  lg.print(scoreLabel, 10, 10)
+  local labelWidth = fonts.label:getWidth(scoreLabel)
+  local labelHeight = fonts.label:getHeight(scoreLabel)
+  local scoreHeight = fonts.value:getHeight(points)
+  if currentDestination.points < lowPointsThreshold then
+    lg.setColor(1, 0.2, 0)
+  else
+    lg.setColor(1, 1, 0)
+  end
+  lg.print(nextLabel .. currentDestination.points, 10, scoreHeight + 10)
+  lg.setColor(1, 1, 0)
+  lg.setFont(fonts.value)
+  lg.print(points, labelWidth + 10, 10 + 2 - (scoreHeight - labelHeight))
+  lg.setColor(1, 1, 1)
+  lg.setNewFont(12)
+  lg.print(speedLabel .. speed, 10, labelHeight + scoreHeight + 10 + 4)
+
+
   -- debug
+  lg.setNewFont(12)
   if debug then
     lg.setColor(1, 1, 1)
     lg.print(table.concat({
