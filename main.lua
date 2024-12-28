@@ -473,12 +473,14 @@ function love.draw()
       lg.setColor(0, 1, 1)
     end
 
+    local planetRadius = math.ceil(planet.radius / 20)
+
     if show then
       lg.circle(
         "fill",
         minimap.x + planet.position.x * minimap.scale,
         minimap.y + planet.position.y * minimap.scale,
-        2
+        planetRadius
       )
 
       if planetIndex == currentDestination.planet then
@@ -486,7 +488,7 @@ function love.draw()
           "line",
           minimap.x + planet.position.x * minimap.scale,
           minimap.y + planet.position.y * minimap.scale,
-          4
+          planetRadius + 2
         )
       end
     end
