@@ -91,68 +91,69 @@ function love.load()
     height = 2000
   }
 
-  planets = {
+  -- repetition reflects odds
+  local planetTemplates = {
     {
-      position = { x = 200, y = 500 },
-      radius = 80,
-      mass = 4000000
-    },
-    {
-      position = { x = 1200, y = 800 },
-      radius = 60,
-      mass = 3000000
-    },
-    {
-      position = { x = 1500, y = 1500 },
-      radius = 80,
-      mass = 4000000
-    },
-    {
-      position = { x = 2100, y = 1000 },
-      radius = 60,
-      mass = 3000000
-    },
-    {
-      position = { x = 450, y = 100 },
       radius = 30,
       mass = 1500000
     },
     {
-      position = { x = 1200, y = 300 },
       radius = 60,
       mass = 3000000
     },
     {
-      position = { x = 2000, y = 1600 },
+      radius = 60,
+      mass = 3000000
+    },
+    {
+      radius = 60,
+      mass = 3000000
+    },
+    {
       radius = 80,
       mass = 4000000
     },
     {
-      position = { x = 2300, y = 400 },
-      radius = 60,
-      mass = 3000000
-    },
-    {
-      position = { x = 3000, y = 900 },
       radius = 80,
       mass = 4000000
     },
     {
-      position = { x = 2500, y = 1600 },
-      radius = 60,
-      mass = 3000000
+      radius = 80,
+      mass = 4000000
     },
-    {
-      position = { x = 3500, y = 1600 },
-      radius = 30,
-      mass = 1500000
-    },
-    {
-      position = { x = 3400, y = 300 },
-      radius = 60,
-      mass = 3000000
-    }
   }
+
+  planets = {}
+  for _ = 1, 24 do
+    local position
+
+    while true do
+      position = {
+        x = 100 + math.random(map.width - 100),
+        y = 100 + math.random(map.height - 100)
+      }
+
+      local fitFound = true
+      for _, planet in ipairs(planets) do
+        local distance = math.sqrt(
+          (planet.position.x - position.x) ^ 2 +
+          (planet.position.y - position.y) ^ 2
+        )
+
+        if distance < 600 then
+          fitFound = false
+          break
+        end
+      end
+
+      if fitFound then
+        local newPlanet = copy(planetTemplates[math.random(#planetTemplates)])
+        newPlanet.position = position
+        table.insert(planets, newPlanet)
+        break
+      end
+    end
+  end
 
   ship = {
     position = { x = planets[1].position.x + 100, y = planets[1].position.y },
