@@ -41,8 +41,14 @@ local function vangle(v1, v2)
 end
 
 local function setNewDestination()
+  local lastPlanet = currentDestination.planet or 0
+  local newPlanet = lastPlanet
+  while lastPlanet == newPlanet do
+    newPlanet = math.random(#planets)
+  end
   currentDestination = {}
-  currentDestination.planet = math.random(#planets)
+  currentDestination.planet = newPlanet
+
   local planet = planets[currentDestination.planet]
   local distance = math.sqrt(
     (planet.position.x - ship.position.x) ^ 2 +
@@ -78,6 +84,7 @@ function love.load()
   lowPointsThreshold = 400
   maxThrust = 105
   friction = 50
+  currentDestination = {}
 
   map = {
     width = 8000,
