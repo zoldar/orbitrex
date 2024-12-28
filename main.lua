@@ -150,6 +150,7 @@ function love.load()
   ship = {
     position = { x = planets[1].position.x + 100, y = planets[1].position.y },
     velocity = { x = 0, y = -200 },
+    turnAngle = math.pi / 4,
     thrust = 0,
     radius = 10,
     mass = 1,
@@ -170,7 +171,7 @@ local function getGravity(centralBody, satelliteBody)
   }
   local distance = math.max(math.sqrt((diff.x ^ 2) + (diff.y ^ 2)), centralBody.radius)
   local direction = { x = diff.x / distance, y = diff.y / distance }
-  local force = math.max(0, (satelliteBody.mass * centralBody.mass) / (distance ^ 2))
+  local force = (satelliteBody.mass * centralBody.mass) / (distance ^ 2)
 
   return { x = direction.x * force, y = direction.y * force }
 end
@@ -208,7 +209,7 @@ local function updateSatellite(satellite, dt)
     }
     local approachAngle = vangle(orbitVector, satellite.velocity)
     local orbitAngle = math.atan2(orbitUnit.y, orbitUnit.x)
-    local orbitSpeed = math.sqrt(satellite.velocity.x ^ 2 + satellite.velocity.y ^ 2)
+    local orbitSpeed = math.max(100, math.sqrt(satellite.velocity.x ^ 2 + satellite.velocity.y ^ 2))
     local orbitDireciton = approachAngle >= 0 and 1 or -1
     local orbitingVelocity = {
       x = math.cos(orbitAngle + orbitDireciton * math.pi / 2) * orbitSpeed,
@@ -239,11 +240,21 @@ end
 
 local function sample(satellite)
   local sampled = copy(satellite)
-  sampled.thrust = 0
+  local speed = math.floor(math.sqrt(
+    satellite.velocity.x ^ 2 + satellite.velocity.y ^ 2
+  ))
+  local sampleCount = 20
+  if speed >= 0.1 then
+    sampled.thrust = 0
+  else
+    sampled.thrust = maxThrust / 2
+    sampleCount = 10
+  end
+
   sampled.orbiting = false
 
   local samples = {}
-  for n = 1, 20 do
+  for n = 1, sampleCount do
     updateSatellite(sampled, 0.2)
     for _, planet in ipairs(planets) do
       local diff = {
@@ -255,7 +266,7 @@ local function sample(satellite)
         return samples
       end
     end
-    table.insert(samples, { x = sampled.position.x, y = sampled.position.y })
+    table.insert(samples, { x = math.floor(sampled.position.x), y = math.floor(sampled.position.y) })
   end
 
   return samples
@@ -298,7 +309,7 @@ function love.update(dt)
     }
     local distance = math.sqrt(orbitVector.x ^ 2 + orbitVector.y ^ 2)
 
-    if distance > ship.radius + planet.radius + orbit + 5 then
+    if distance > ship.radius + planet.radius + orbit + 10 then
       ship.orbiting = false
     end
   else
@@ -333,10 +344,28 @@ function love.update(dt)
 
   updateSatellite(ship, dt)
 
-  if ship.orbiting then
-    trajectory = {}
+  trajectory = sample(ship)
+
+  local speed = math.floor(math.sqrt(
+    ship.velocity.x ^ 2 + ship.velocity.y ^ 2
+  ))
+
+  local velocityAngle
+  if #trajectory == 0 or speed >= 0.1 then
+    velocityAngle = math.atan2(ship.velocity.y, ship.velocity.x)
   else
-    trajectory = sample(ship)
+    local lastTrajectory = trajectory[#trajectory]
+    local diff = {
+      x = lastTrajectory.x - ship.position.x,
+      y = lastTrajectory.y - ship.position.y
+    }
+    speed = math.sqrt(diff.x ^ 2 + diff.y ^ 2)
+
+    velocityAngle = math.atan2(diff.y, diff.x)
+  end
+
+  if speed >= 0.1 then
+    ship.turnAngle = velocityAngle -- math.atan2(ship.turnAngle, velocityAngle, 0.3)
   end
 end
 
@@ -363,6 +392,10 @@ local function cullBy(entity, container)
 end
 
 function love.draw()
+  local speed = math.floor(math.sqrt(
+    ship.velocity.x ^ 2 + ship.velocity.y ^ 2
+  ))
+
   lg.push()
   lg.translate(-ship.position.x + lg.getWidth() / 2, -ship.position.y + lg.getHeight() / 2)
   for planetIndex, planet in ipairs(planets) do
@@ -378,11 +411,9 @@ function love.draw()
     lg.circle("line", planet.position.x, planet.position.y, planet.radius + orbit)
   end
 
-  local velocityAngle = math.atan2(ship.velocity.y, ship.velocity.x)
-
   lg.push()
   lg.translate(ship.position.x, ship.position.y)
-  lg.rotate(velocityAngle)
+  lg.rotate(ship.turnAngle)
   lg.setColor(0.6, 0.6, 0.6)
   lg.polygon(
     "fill",
@@ -489,10 +520,6 @@ function love.draw()
       end
     end
   end
-
-  local speed = math.floor(math.sqrt(
-    ship.velocity.x ^ 2 + ship.velocity.y ^ 2
-  ))
 
   local scoreLabel = "SCORE: "
   local nextLabel = "NEXT: "
