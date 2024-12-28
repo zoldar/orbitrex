@@ -413,11 +413,11 @@ function love.draw()
 
   -- minimap
   local minimap = {
-    y = 10,
+    y = 30,
     width = lg.getWidth() / 3
   }
 
-  minimap.x = lg.getWidth() - 10 - minimap.width
+  minimap.x = lg.getWidth() - 20 - minimap.width
   minimap.scale = minimap.width / map.width
   minimap.height = minimap.scale * map.height
 
