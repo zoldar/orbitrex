@@ -16,6 +16,7 @@ local lowPointsThreshold
 local lg = love.graphics
 local lk = love.keyboard
 local lt = love.timer
+local lm = love.math
 
 local function copy(obj, seen)
   if type(obj) ~= 'table' then return obj end
@@ -44,7 +45,7 @@ local function setNewDestination()
   local lastPlanet = currentDestination.planet or 0
   local newPlanet = lastPlanet
   while lastPlanet == newPlanet do
-    newPlanet = math.random(#planets)
+    newPlanet = lm.random(#planets)
   end
   currentDestination = {}
   currentDestination.planet = newPlanet
@@ -133,12 +134,12 @@ function love.load()
   planets = {}
   for _ = 1, 24 do
     local position
-    local newPlanet = copy(planetTemplates[math.random(#planetTemplates)])
+    local newPlanet = copy(planetTemplates[lm.random(#planetTemplates)])
 
     while true do
       position = {
-        x = 100 + math.random(map.width - 100),
-        y = 100 + math.random(map.height - 100)
+        x = 100 + lm.random(map.width - 100),
+        y = 100 + lm.random(map.height - 100)
       }
 
       local fitFound = true
