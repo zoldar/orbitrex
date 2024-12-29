@@ -102,22 +102,17 @@ function love.load()
     {
       radius = 60,
       mass = 3000000,
-      minDistance = 800
+      minDistance = 700
     },
     {
       radius = 60,
       mass = 3000000,
-      minDistance = 800
+      minDistance = 700
     },
     {
       radius = 60,
       mass = 3000000,
-      minDistance = 800
-    },
-    {
-      radius = 80,
-      mass = 4000000,
-      minDistance = 600
+      minDistance = 700
     },
     {
       radius = 80,
@@ -132,9 +127,10 @@ function love.load()
   }
 
   planets = {}
-  for _ = 1, 24 do
+  for _ = 1, 20 do
     local position
     local newPlanet = copy(planetTemplates[lm.random(#planetTemplates)])
+    local attemptsLeft = 1000
 
     while true do
       position = {
@@ -149,7 +145,7 @@ function love.load()
           (planet.position.y - position.y) ^ 2
         )
 
-        if distance < 600 then
+        if distance < planet.minDistance then
           fitFound = false
           break
         end
@@ -158,6 +154,12 @@ function love.load()
       if fitFound then
         newPlanet.position = position
         table.insert(planets, newPlanet)
+        break
+      end
+
+      attemptsLeft = attemptsLeft - 1
+
+      if attemptsLeft == 0 then
         break
       end
     end
