@@ -410,6 +410,22 @@ local function cullBy(entity, container)
 end
 
 function love.draw()
+  local planet = planets[currentDestination.planet]
+
+  local destinationVector = {
+    x = planet.position.x - ship.position.x,
+    y = planet.position.y - ship.position.y
+  }
+
+  local destinationDistance = math.sqrt(
+    destinationVector.x ^ 2 + destinationVector.y ^ 2
+  )
+
+  local destinationDirection = {
+    x = destinationVector.x / destinationDistance,
+    y = destinationVector.y / destinationDistance
+  }
+
   local speed = math.floor(math.sqrt(
     ship.velocity.x ^ 2 + ship.velocity.y ^ 2
   ))
@@ -429,8 +445,34 @@ function love.draw()
     lg.circle("line", planet.position.x, planet.position.y, planet.radius + orbit)
   end
 
+  local destinationVisible =
+      (planet.position.x + planet.radius > ship.position.x - lg.getWidth() / 2 and
+        planet.position.x - planet.radius < ship.position.x + lg.getWidth() / 2 and
+        planet.position.y + planet.radius > ship.position.y - lg.getHeight() / 2 and
+        planet.position.y - planet.radius < ship.position.y + lg.getHeight() / 2)
+
+  if not destinationVisible then
+    lg.setColor(0, 1, 0, 0.7)
+    lg.push()
+    lg.translate(
+      ship.position.x + destinationDirection.x * ship.radius * 16,
+      ship.position.y + destinationDirection.y * ship.radius * 16
+    )
+    lg.print(string.format("%5.2f", destinationDistance / 100), ship.radius * 3, 0)
+    lg.rotate(math.atan2(destinationDirection.y, destinationDirection.x))
+
+    lg.polygon(
+      "fill",
+      ship.radius * 3, 0,
+      -ship.radius * 2, -ship.radius * 1.5,
+      -ship.radius * 2, ship.radius * 1.5
+    )
+    lg.pop()
+  end
+
   lg.push()
   lg.translate(ship.position.x, ship.position.y)
+
   lg.rotate(ship.turnAngle)
   lg.setColor(0.6, 0.6, 0.6)
   lg.polygon(
