@@ -138,8 +138,8 @@ function love.load()
 
     while true do
       position = {
-        x = 100 + lm.random(map.width - 100),
-        y = 100 + lm.random(map.height - 100)
+        x = 300 + lm.random(map.width - 600),
+        y = 300 + lm.random(map.height - 600)
       }
 
       local fitFound = true
