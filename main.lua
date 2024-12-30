@@ -83,7 +83,7 @@ function love.load()
 
   points = 0
   lowPointsThreshold = 400
-  maxThrust = 105
+  maxThrust = 155
   friction = 50
   currentDestination = {}
 
@@ -189,7 +189,7 @@ local function getGravity(centralBody, satelliteBody)
   }
   local distance = math.max(math.sqrt((diff.x ^ 2) + (diff.y ^ 2)), centralBody.radius)
   local direction = { x = diff.x / distance, y = diff.y / distance }
-  local force = (satelliteBody.mass * centralBody.mass) / (distance ^ 2)
+  local force = (satelliteBody.mass * centralBody.mass) / (distance ^ 1.9)
 
   return { x = direction.x * force, y = direction.y * force }
 end
