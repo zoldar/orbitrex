@@ -84,7 +84,7 @@ function love.load()
   points = 0
   lowPointsThreshold = 400
   maxThrust = 155
-  friction = 50
+  friction = 70
   currentDestination = {}
 
   map = {
