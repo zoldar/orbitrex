@@ -44,17 +44,29 @@ end
 local function setNewDestination()
   local lastPlanet = currentDestination.planet or 0
   local newPlanet = lastPlanet
+  local planet
+  local distance
+
   while lastPlanet == newPlanet do
     newPlanet = lm.random(#planets)
+    if planets[newPlanet].blackHole then
+      newPlanet = lastPlanet
+    else
+      planet = planets[newPlanet]
+      distance = math.sqrt(
+        (planet.position.x - ship.position.x) ^ 2 +
+        (planet.position.y - ship.position.y) ^ 2
+      )
+
+      if distance < 1500 then
+        newPlanet = lastPlanet
+      end
+    end
   end
+
   currentDestination = {}
   currentDestination.planet = newPlanet
 
-  local planet = planets[currentDestination.planet]
-  local distance = math.sqrt(
-    (planet.position.x - ship.position.x) ^ 2 +
-    (planet.position.y - ship.position.y) ^ 2
-  )
   currentDestination.points = math.floor(distance)
   currentDestination.start = lt.getTime()
 end
@@ -85,6 +97,7 @@ function love.load()
   lowPointsThreshold = 400
   maxThrust = 155
   friction = 70
+  orbit = 20
   currentDestination = {}
 
   map = {
@@ -127,6 +140,23 @@ function love.load()
   }
 
   planets = {}
+
+  -- put 2 black holes on the map
+  for i = 1, 2 do
+    local position = {
+      x = (i - 1) * map.width / 2 + map.width / 6 + lm.random(math.floor(map.width / 6)),
+      y = map.height / 3 + lm.random(math.floor(map.height / 3))
+    }
+
+    table.insert(planets, {
+      position = position,
+      blackHole = true,
+      mass = 20000000,
+      radius = 120,
+      minDistance = 1000
+    })
+  end
+
   for _ = 1, 20 do
     local position
     local newPlanet = copy(planetTemplates[lm.random(#planetTemplates)])
@@ -166,7 +196,7 @@ function love.load()
   end
 
   ship = {
-    position = { x = planets[1].position.x + 100, y = planets[1].position.y },
+    position = { x = planets[#planets].position.x + planets[#planets].radius + orbit, y = planets[#planets].position.y },
     velocity = { x = 0, y = -200 },
     turnAngle = math.pi / 4,
     thrust = 0,
@@ -174,10 +204,10 @@ function love.load()
     mass = 1,
     orbiting = false,
     orbitingPlanet = nil,
+    fuel = 100
   }
 
   trajectory = {}
-  orbit = 20
 
   setNewDestination()
 end
@@ -315,6 +345,7 @@ function love.update(dt)
 
   if ship.thrust > 0.1 then
     sounds.burn:setVolume(ship.thrust / maxThrust)
+    ship.fuel = ship.fuel - (ship.thrust / maxThrust) * 2 * dt
   else
     sounds.burn:setVolume(0)
   end
@@ -340,7 +371,7 @@ function love.update(dt)
       local approachAngle = vangle(orbitVector, ship.velocity)
       local speed = math.sqrt(ship.velocity.x ^ 2 + ship.velocity.y ^ 2)
 
-      if distance <= ship.radius + planet.radius + orbit then
+      if not planet.blackHole and distance <= ship.radius + planet.radius + orbit then
         if math.abs(approachAngle) < 10 and speed > 300 then
           sounds.bounce:play()
         end
@@ -354,6 +385,7 @@ function love.update(dt)
           points = points + currentDestination.points
           sounds.oneup:play()
           setNewDestination()
+          ship.fuel = math.min(100, ship.fuel + 50)
         end
         break
       end
@@ -433,16 +465,27 @@ function love.draw()
   lg.push()
   lg.translate(-ship.position.x + lg.getWidth() / 2, -ship.position.y + lg.getHeight() / 2)
   for planetIndex, planet in ipairs(planets) do
-    lg.setColor(0, 1, 1)
-    lg.circle("fill", planet.position.x, planet.position.y, planet.radius)
+    if not planet.blackHole then
+      lg.setColor(0, 1, 1)
+      lg.circle("fill", planet.position.x, planet.position.y, planet.radius)
+    else
+      lg.setColor(0, 0.4, 0.4)
+      local currentRadius = 10
+      while currentRadius <= planet.radius do
+        lg.circle("line", planet.position.x, planet.position.y, currentRadius)
+        currentRadius = currentRadius + 10
+      end
+    end
 
     if planetIndex == currentDestination.planet then
       lg.setColor(1, 1, 0, 0.2)
       lg.circle("fill", planet.position.x, planet.position.y, planet.radius)
     end
 
-    lg.setColor(0, 0.4, 0.4)
-    lg.circle("line", planet.position.x, planet.position.y, planet.radius + orbit)
+    if not planet.blackHole then
+      lg.setColor(0, 0.4, 0.4)
+      lg.circle("line", planet.position.x, planet.position.y, planet.radius + orbit)
+    end
   end
 
   local destinationVisible =
@@ -515,34 +558,46 @@ function love.draw()
   lg.setColor(0, 0.2, 0.2, 0.5)
   lg.rectangle("fill", minimap.x, minimap.y, minimap.width, minimap.height)
   for planetIndex, planet in ipairs(planets) do
-    local show = true
-    if planetIndex == currentDestination.planet then
-      lg.setColor(1, 1, 0)
-      if currentDestination.points < lowPointsThreshold and math.sin(math.pi * lt.getTime() * 4) > 0 then
-        show = false
+    if not planet.blackHole then
+      local show = true
+      if planetIndex == currentDestination.planet then
+        lg.setColor(1, 1, 0)
+        if currentDestination.points < lowPointsThreshold and math.sin(math.pi * lt.getTime() * 4) > 0 then
+          show = false
+        end
+      else
+        lg.setColor(0, 1, 1)
+      end
+
+      local planetRadius = math.ceil(planet.radius / 20)
+
+      if show then
+        lg.circle(
+          "fill",
+          minimap.x + planet.position.x * minimap.scale,
+          minimap.y + planet.position.y * minimap.scale,
+          planetRadius
+        )
+
+        if planetIndex == currentDestination.planet then
+          lg.circle(
+            "line",
+            minimap.x + planet.position.x * minimap.scale,
+            minimap.y + planet.position.y * minimap.scale,
+            planetRadius + 2
+          )
+        end
       end
     else
       lg.setColor(0, 1, 1)
-    end
+      local planetRadius = math.ceil(planet.radius / 20)
 
-    local planetRadius = math.ceil(planet.radius / 20)
-
-    if show then
       lg.circle(
-        "fill",
+        "line",
         minimap.x + planet.position.x * minimap.scale,
         minimap.y + planet.position.y * minimap.scale,
         planetRadius
       )
-
-      if planetIndex == currentDestination.planet then
-        lg.circle(
-          "line",
-          minimap.x + planet.position.x * minimap.scale,
-          minimap.y + planet.position.y * minimap.scale,
-          planetRadius + 2
-        )
-      end
     end
   end
   lg.setColor(0, 1, 0)
@@ -586,6 +641,7 @@ function love.draw()
   local scoreLabel = "SCORE: "
   local nextLabel = "NEXT: "
   local speedLabel = "SPEED: "
+  local fuelLabel = "FUEL: "
   lg.setColor(1, 1, 1)
   lg.setFont(fonts.label)
   lg.print(scoreLabel, 10, 10)
@@ -604,6 +660,8 @@ function love.draw()
   lg.setColor(1, 1, 1)
   lg.setNewFont(12)
   lg.print(speedLabel .. speed, 10, labelHeight + scoreHeight + 10 + 4)
+  lg.setColor(0, 0.2, 1)
+  lg.print(fuelLabel .. string.format("%5.2f", ship.fuel), 10, 2 * labelHeight + scoreHeight + 10 + 4)
 
 
   -- debug
