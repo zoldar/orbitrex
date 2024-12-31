@@ -84,18 +84,24 @@ function love.load()
     oneup = love.audio.newSource("assets/oneup.wav", "static"),
     warning = love.audio.newSource("assets/warning.wav", "static"),
     timeout = love.audio.newSource("assets/timeout.wav", "static"),
-    bounce = love.audio.newSource("assets/bounce.wav", "static")
+    bounce = love.audio.newSource("assets/bounce.wav", "static"),
+    bhole = love.audio.newSource("assets/bhole.wav", "static"),
+
   }
   sounds.burn:setVolume(0)
   sounds.burn:setLooping(true)
   sounds.burn:play()
+
+  sounds.bhole:setVolume(0)
+  sounds.bhole:setLooping(true)
+  sounds.bhole:play()
 
   local joysticks = love.joystick.getJoysticks()
   joystick = joysticks[1]
 
   points = 0
   lowPointsThreshold = 400
-  maxThrust = 155
+  maxThrust = 175
   friction = 70
   orbit = 20
   currentDestination = {}
@@ -348,6 +354,22 @@ function love.update(dt)
     ship.fuel = ship.fuel - (ship.thrust / maxThrust) * 2 * dt
   else
     sounds.burn:setVolume(0)
+  end
+
+  sounds.bhole:setVolume(0)
+
+  for _, bhole in ipairs(planets) do
+    if bhole.blackHole then
+      local distance = math.sqrt(
+        (bhole.position.x - ship.position.x)^2 +
+        (bhole.position.y - ship.position.y)^2
+      )
+
+      if distance < 1000 then
+        sounds.bhole:setVolume((1000 - distance) / 1000)
+        break
+      end
+    end
   end
 
   if ship.orbiting then
