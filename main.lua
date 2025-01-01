@@ -1,17 +1,15 @@
 local debug
 local fonts
+local sounds
 local joystick
+local baseShip
+local map
 local planetTemplates
 local planets
 local ship
-local maxThrust
-local friction
 local trajectory
-local orbit
-local map
 local currentDestination
 local points
-local sounds
 local lowPointsThreshold
 
 local lg = love.graphics
@@ -19,6 +17,8 @@ local lk = love.keyboard
 local lt = love.timer
 local lm = love.math
 local b = require("lib/batteries")
+
+local physics = require("physics")
 
 local function setNewDestination()
   local lastPlanet = currentDestination.planet or 0
@@ -28,14 +28,11 @@ local function setNewDestination()
 
   while lastPlanet == newPlanet do
     newPlanet = lm.random(#planets)
-    if planets[newPlanet].blackHole then
+    if not planets[newPlanet].orbitable then
       newPlanet = lastPlanet
     else
       planet = planets[newPlanet]
-      distance = math.sqrt(
-        (planet.position.x - ship.position.x) ^ 2 +
-        (planet.position.y - ship.position.y) ^ 2
-      )
+      distance = (planet.position - ship.position):length()
 
       if distance < 1500 then
         newPlanet = lastPlanet
@@ -85,10 +82,11 @@ local function generateMap()
     )
 
     table.insert(planets, {
+      orbitable = false,
       position = position,
-      blackHole = true,
       mass = 20000000,
       radius = 120,
+      orbit = 0,
       minDistance = 1000
     })
   end
@@ -133,17 +131,19 @@ local function reset()
   currentDestination = {}
   local lastPlanet = b.table.back(planets)
 
-  ship = {
-    position = b.vec2(lastPlanet.position.x + lastPlanet.radius + orbit, lastPlanet.position.y),
+  ship = b.table.copy(baseShip)
+  ship = b.table.overlay(b.table.copy(baseShip), {
+    position = b.vec2(
+      lastPlanet.position.x + lastPlanet.radius + lastPlanet.orbit,
+      lastPlanet.position.y
+    ),
     velocity = b.vec2(0, -200),
     turnAngle = math.pi / 4,
     thrust = 0,
-    radius = ship.radius,
-    mass = ship.mass,
     orbiting = false,
-    orbitingPlanet = nil,
+    orbitingBody = nil,
     fuel = 100
-  }
+  })
 
   trajectory = {}
 
@@ -159,13 +159,12 @@ function love.load()
   joystick = joysticks[1]
 
   lowPointsThreshold = 400
-  maxThrust = 175
-  friction = 70
-  orbit = 20
 
-  ship = {
+  baseShip = {
     mass = 1,
-    radius = 10
+    radius = 10,
+    friction = 70,
+    maxThrust = 175
   }
 
   map = {
@@ -176,85 +175,50 @@ function love.load()
   -- repetition reflects odds
   planetTemplates = {
     {
+      orbitable = true,
       radius = 30,
+      orbit = 20,
       mass = 1500000,
       minDistance = 1000
     },
     {
+      orbitable = true,
       radius = 60,
+      orbit = 20,
       mass = 3000000,
       minDistance = 700
     },
     {
+      orbitable = true,
       radius = 60,
+      orbit = 20,
       mass = 3000000,
       minDistance = 700
     },
     {
+      orbitable = true,
       radius = 60,
+      orbit = 20,
       mass = 3000000,
       minDistance = 700
     },
     {
+      orbitable = true,
       radius = 80,
+      orbit = 20,
       mass = 4000000,
       minDistance = 600
     },
     {
+      orbitable = true,
       radius = 80,
+      orbit = 20,
       mass = 4000000,
       minDistance = 600
     },
   }
 
   reset()
-end
-
-local function getGravity(centralBody, satelliteBody)
-  local diff = centralBody.position - satelliteBody.position
-  local distance = math.max(diff:length(), centralBody.radius)
-  local direction = diff:normalise()
-  local force = (satelliteBody.mass * centralBody.mass) / (distance ^ 1.9)
-
-  return direction * force
-end
-
-local function updateSatellite(satellite, dt)
-  local direction = satellite.velocity:normalise()
-
-  local pull = b.vec2(0, 0)
-  for _, planet in ipairs(planets) do
-    local gravity = getGravity(planet, satellite)
-    pull = pull + gravity
-  end
-
-  local newVelocity = satellite.velocity + direction * (satellite.thrust - friction) * dt + pull * dt
-
-  local newPosition = satellite.position + satellite.velocity * dt
-
-  if satellite.orbiting then
-    local planet = planets[satellite.orbitingPlanet]
-    local orbitVector = planet.position - satellite.position
-    local orbitUnit = orbitVector:normalise()
-    local approachAngle = orbitVector:angle_difference(satellite.velocity)
-    local orbitAngle = orbitUnit:angle()
-    local orbitSpeed = math.max(100, satellite.velocity:length())
-    local orbitDireciton = approachAngle >= 0 and 1 or -1
-    local surfaceDirection = orbitAngle + orbitDireciton * math.pi / 2
-    local orbitingVelocity = b.vec2(math.cos(surfaceDirection), math.sin(surfaceDirection)) * orbitSpeed
-    local orbitingPosition = satellite.position + orbitingVelocity * dt
-
-    local orbitingDistance = (orbitingPosition - planet.position):length()
-    local normalDistance = (newPosition - planet.position):length()
-
-    if orbitingDistance > normalDistance then
-      newVelocity = orbitingVelocity
-      newPosition = orbitingPosition
-    end
-  end
-
-  satellite.velocity = newVelocity
-  satellite.position = newPosition
 end
 
 local function sample(satellite)
@@ -264,7 +228,7 @@ local function sample(satellite)
   if speed >= 0.1 then
     sampled.thrust = 0
   else
-    sampled.thrust = maxThrust / 2
+    sampled.thrust = sampled.maxThrust / 2
     sampleCount = 10
   end
 
@@ -272,10 +236,10 @@ local function sample(satellite)
 
   local samples = {}
   for n = 1, sampleCount do
-    updateSatellite(sampled, 0.2)
+    physics.updateSatellite(sampled, planets, 0.2)
     for _, planet in ipairs(planets) do
       local distance = (planet.position - sampled.position):length()
-      if distance < planet.radius + orbit then
+      if distance < planet.radius + planet.orbit then
         return samples
       end
     end
@@ -303,14 +267,14 @@ function love.update(dt)
 
   local touches = love.touch.getTouches()
   if lk.isDown("up") or (joystick and joystick:isDown(1)) or #touches > 0 then
-    ship.thrust = b.math.lerp(ship.thrust, maxThrust, 0.1)
+    ship.thrust = b.math.lerp(ship.thrust, ship.maxThrust, 0.1)
   else
     ship.thrust = b.math.lerp(ship.thrust, 0, 0.2)
   end
 
   if ship.thrust > 0.1 then
-    sounds.burn:setVolume(ship.thrust / maxThrust)
-    ship.fuel = ship.fuel - (ship.thrust / maxThrust) * 2 * dt
+    sounds.burn:setVolume(ship.thrust / ship.maxThrust)
+    ship.fuel = ship.fuel - (ship.thrust / ship.maxThrust) * 2 * dt
   else
     sounds.burn:setVolume(0)
   end
@@ -318,7 +282,7 @@ function love.update(dt)
   sounds.bhole:setVolume(0)
 
   for _, bhole in ipairs(planets) do
-    if bhole.blackHole then
+    if not bhole.orbitable then
       local distance = (bhole.position - ship.position):length()
 
       if distance < 1000 then
@@ -328,39 +292,24 @@ function love.update(dt)
     end
   end
 
-  if ship.orbiting then
-    local planet = planets[ship.orbitingPlanet]
-    local distance = (planet.position - ship.position):length()
+  local currentOrbiting = ship.orbiting
 
-    if distance > ship.radius + planet.radius + orbit + 10 then
-      ship.orbiting = false
+  physics.update({ ship }, planets, dt)
+
+  if not currentOrbiting and ship.orbiting then
+    local planet = planets[ship.orbitingBody]
+    local approachAngle = (planet.position - ship.position):angle_difference(ship.velocity)
+    local speed = ship.velocity:length()
+    if math.abs(approachAngle) < 10 and speed > 300 then
+      sounds.bounce:play()
     end
-  else
-    for planetIndex, planet in ipairs(planets) do
-      local orbitVector = planet.position - ship.position
-      local distance = orbitVector:length()
-      local approachAngle = orbitVector:angle_difference(ship.velocity)
-      local speed = ship.velocity:length()
-
-      if not planet.blackHole and distance <= ship.radius + planet.radius + orbit then
-        if math.abs(approachAngle) < 10 and speed > 300 then
-          sounds.bounce:play()
-        end
-        ship.orbiting = true
-        ship.orbitingPlanet = planetIndex
-        ship.velocity = ship.velocity * 0.8
-        if planetIndex == currentDestination.planet then
-          points = points + currentDestination.points
-          sounds.oneup:play()
-          setNewDestination()
-          ship.fuel = math.min(100, ship.fuel + 50)
-        end
-        break
-      end
+    if ship.orbitingBody == currentDestination.planet then
+      points = points + currentDestination.points
+      sounds.oneup:play()
+      setNewDestination()
+      ship.fuel = math.min(100, ship.fuel + 50)
     end
   end
-
-  updateSatellite(ship, dt)
 
   trajectory = sample(ship)
 
@@ -413,7 +362,7 @@ function love.draw()
   lg.push()
   lg.translate(-ship.position.x + lg.getWidth() / 2, -ship.position.y + lg.getHeight() / 2)
   for planetIndex, planet in ipairs(planets) do
-    if not planet.blackHole then
+    if planet.orbitable then
       lg.setColor(0, 1, 1)
       lg.circle("fill", planet.position.x, planet.position.y, planet.radius)
     else
@@ -430,9 +379,9 @@ function love.draw()
       lg.circle("fill", planet.position.x, planet.position.y, planet.radius)
     end
 
-    if not planet.blackHole then
+    if planet.orbitable then
       lg.setColor(0, 0.4, 0.4)
-      lg.circle("line", planet.position.x, planet.position.y, planet.radius + orbit)
+      lg.circle("line", planet.position.x, planet.position.y, planet.radius + planet.orbit)
     end
   end
 
@@ -476,10 +425,10 @@ function love.draw()
     lg.setColor(1, 1, 0)
     lg.ellipse(
       "fill",
-      -ship.radius - (ship.thrust / maxThrust) * 8,
+      -ship.radius - (ship.thrust / ship.maxThrust) * 8,
       0,
-      (ship.thrust / maxThrust) * 8,
-      (ship.thrust / maxThrust) * 4
+      (ship.thrust / ship.maxThrust) * 8,
+      (ship.thrust / ship.maxThrust) * 4
     )
   end
   lg.pop()
@@ -504,7 +453,7 @@ function love.draw()
   lg.setColor(0, 0.2, 0.2, 0.5)
   lg.rectangle("fill", minimap.x, minimap.y, minimap.width, minimap.height)
   for planetIndex, planet in ipairs(planets) do
-    if not planet.blackHole then
+    if planet.orbitable then
       local show = true
       if planetIndex == currentDestination.planet then
         lg.setColor(1, 1, 0)
