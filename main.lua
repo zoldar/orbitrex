@@ -138,7 +138,7 @@ local function reset()
       lastPlanet.position.y
     ),
     velocity = b.vec2(0, -200),
-    turnAngle = math.pi / 4,
+    turnDirection = b.vec2(0, -1),
     thrust = 0,
     orbiting = false,
     orbitingBody = nil,
@@ -221,17 +221,10 @@ function love.load()
   reset()
 end
 
-local function sample(satellite)
+local function sample(satellite, sampleCount)
   local sampled = b.table.deep_copy(satellite)
   local speed = math.floor(satellite.velocity:length())
-  local sampleCount = 20
-  if speed >= 0.1 then
-    sampled.thrust = 0
-  else
-    sampled.thrust = sampled.maxThrust / 2
-    sampleCount = 10
-  end
-
+  sampled.thrust = 0
   sampled.orbiting = false
 
   local samples = {}
@@ -243,7 +236,7 @@ local function sample(satellite)
         return samples
       end
     end
-    table.insert(samples, sampled.position:floor())
+    table.insert(samples, sampled.position)
   end
 
   return samples
@@ -311,25 +304,9 @@ function love.update(dt)
     end
   end
 
-  trajectory = sample(ship)
+  trajectory = sample(ship, 20)
 
-  local speed = math.floor(ship.velocity:length())
-
-  local velocityAngle
-  if #trajectory == 0 or speed >= 0.1 then
-    velocityAngle = ship.velocity:angle()
-  else
-    local lastTrajectory = b.table.back(trajectory)
-    local diff = lastTrajectory - ship.position
-    speed = diff:length()
-
-    velocityAngle = diff:angle()
-  end
-
-  if speed >= 0.1 then
-    ship.turnAngle = velocityAngle
-    -- ship.turnAngle = b.math.lerp(ship.turnAngle, velocityAngle, 0.3)
-  end
+  ship.turnDirection = b.math.lerp(ship.turnDirection, ship.velocity:normalise(), 0.3)
 end
 
 function love.keypressed(key)
@@ -411,7 +388,7 @@ function love.draw()
   lg.push()
   lg.translate(ship.position.x, ship.position.y)
 
-  lg.rotate(ship.turnAngle)
+  lg.rotate(ship.turnDirection:angle())
   lg.setColor(0.6, 0.6, 0.6)
   lg.polygon(
     "fill",

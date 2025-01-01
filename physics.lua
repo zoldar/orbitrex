@@ -20,7 +20,11 @@ function _M.updateSatellite(satellite, bodies, dt)
     pull = pull + gravity
   end
 
-  local newVelocity = satellite.velocity + direction * (satellite.thrust - satellite.friction) * dt + pull * dt
+  local thrustVector = direction * (satellite.thrust - satellite.friction) * dt
+  if satellite.thrust - satellite.friction < 0 and thrustVector:length() > satellite.velocity:length() then
+    thrustVector = -1 * satellite.velocity
+  end
+  local newVelocity = satellite.velocity + thrustVector + pull * dt
   local newPosition = satellite.position + satellite.velocity * dt
 
   if satellite.orbiting then
