@@ -17,29 +17,7 @@ local lg = love.graphics
 local lk = love.keyboard
 local lt = love.timer
 local lm = love.math
-
-local function copy(obj, seen)
-  if type(obj) ~= 'table' then return obj end
-  if seen and seen[obj] then return seen[obj] end
-  local s = seen or {}
-  local res = setmetatable({}, getmetatable(obj))
-  s[obj] = res
-  for k, v in pairs(obj) do res[copy(k, s)] = copy(v, s) end
-  return res
-end
-
-local function lerp(x, a, frac)
-  return x + (a - x) * frac
-end
-
-local function clamp(min, val, max)
-  return math.max(min, math.min(val, max));
-end
-
-local function vangle(v1, v2)
-  local a = math.atan2(v2.y, v2.x) - math.atan2(v1.y, v1.x)
-  return (a + math.pi) % (math.pi * 2) - math.pi
-end
+local b = require("lib/batteries")
 
 local function setNewDestination()
   local lastPlanet = currentDestination.planet or 0
@@ -149,10 +127,10 @@ function love.load()
 
   -- put 2 black holes on the map
   for i = 1, 2 do
-    local position = {
-      x = (i - 1) * map.width / 2 + map.width / 6 + lm.random(math.floor(map.width / 6)),
-      y = map.height / 3 + lm.random(math.floor(map.height / 3))
-    }
+    local position = b.vec2(
+      (i - 1) * map.width / 2 + map.width / 6 + lm.random(math.floor(map.width / 6)),
+      map.height / 3 + lm.random(math.floor(map.height / 3))
+    )
 
     table.insert(planets, {
       position = position,
@@ -165,21 +143,15 @@ function love.load()
 
   for _ = 1, 20 do
     local position
-    local newPlanet = copy(planetTemplates[lm.random(#planetTemplates)])
+    local newPlanet = b.table.deep_copy(planetTemplates[lm.random(#planetTemplates)])
     local attemptsLeft = 1000
 
     while true do
-      position = {
-        x = 300 + lm.random(map.width - 600),
-        y = 300 + lm.random(map.height - 600)
-      }
+      position = b.vec2(300 + lm.random(map.width - 600), 300 + lm.random(map.height - 600))
 
       local fitFound = true
       for _, planet in ipairs(planets) do
-        local distance = math.sqrt(
-          (planet.position.x - position.x) ^ 2 +
-          (planet.position.y - position.y) ^ 2
-        )
+        local distance = planet.position:distance(position)
 
         if distance < planet.minDistance then
           fitFound = false
@@ -201,9 +173,11 @@ function love.load()
     end
   end
 
+  local lastPlanet = b.table.back(planets)
+
   ship = {
-    position = { x = planets[#planets].position.x + planets[#planets].radius + orbit, y = planets[#planets].position.y },
-    velocity = { x = 0, y = -200 },
+    position = b.vec2(lastPlanet.position.x + lastPlanet.radius + orbit, lastPlanet.position.y),
+    velocity = b.vec2(0, -200),
     turnAngle = math.pi / 4,
     thrust = 0,
     radius = 10,
@@ -219,68 +193,41 @@ function love.load()
 end
 
 local function getGravity(centralBody, satelliteBody)
-  local diff = {
-    x = centralBody.position.x - satelliteBody.position.x,
-    y = centralBody.position.y - satelliteBody.position.y
-  }
-  local distance = math.max(math.sqrt((diff.x ^ 2) + (diff.y ^ 2)), centralBody.radius)
-  local direction = { x = diff.x / distance, y = diff.y / distance }
+  local diff = centralBody.position - satelliteBody.position
+  local distance = math.max(diff:length(), centralBody.radius)
+  local direction = diff:normalise()
   local force = (satelliteBody.mass * centralBody.mass) / (distance ^ 1.9)
 
-  return { x = direction.x * force, y = direction.y * force }
+  return direction * force
 end
 
 local function updateSatellite(satellite, dt)
-  local speed = math.sqrt((satellite.velocity.x ^ 2) + (satellite.velocity.y ^ 2))
-  local direction = { x = satellite.velocity.x / speed, y = satellite.velocity.y / speed }
+  local direction = satellite.velocity:normalise()
 
-  local pull = { x = 0, y = 0 }
+  local pull = b.vec2(0, 0)
   for _, planet in ipairs(planets) do
     local gravity = getGravity(planet, satellite)
-    pull = { x = pull.x + gravity.x, y = pull.y + gravity.y }
+    pull = pull + gravity
   end
 
-  local newVelocity = {
-    x = satellite.velocity.x + direction.x * (satellite.thrust - friction) * dt + pull.x * dt,
-    y = satellite.velocity.y + direction.y * (satellite.thrust - friction) * dt + pull.y * dt
-  }
+  local newVelocity = satellite.velocity + direction * (satellite.thrust - friction) * dt + pull * dt
 
-  local newPosition = {
-    x = satellite.position.x + satellite.velocity.x * dt,
-    y = satellite.position.y + satellite.velocity.y * dt
-  }
+  local newPosition = satellite.position + satellite.velocity * dt
 
   if satellite.orbiting then
     local planet = planets[satellite.orbitingPlanet]
-    local orbitVector = {
-      x = planet.position.x - satellite.position.x,
-      y = planet.position.y - satellite.position.y
-    }
-    local distance = math.sqrt(orbitVector.x ^ 2 + orbitVector.y ^ 2)
-    local orbitUnit = {
-      x = orbitVector.x / distance,
-      y = orbitVector.y / distance
-    }
-    local approachAngle = vangle(orbitVector, satellite.velocity)
-    local orbitAngle = math.atan2(orbitUnit.y, orbitUnit.x)
-    local orbitSpeed = math.max(100, math.sqrt(satellite.velocity.x ^ 2 + satellite.velocity.y ^ 2))
+    local orbitVector = planet.position - satellite.position
+    local orbitUnit = orbitVector:normalise()
+    local approachAngle = orbitVector:angle_difference(satellite.velocity)
+    local orbitAngle = orbitUnit:angle()
+    local orbitSpeed = math.max(100, satellite.velocity:length())
     local orbitDireciton = approachAngle >= 0 and 1 or -1
-    local orbitingVelocity = {
-      x = math.cos(orbitAngle + orbitDireciton * math.pi / 2) * orbitSpeed,
-      y = math.sin(orbitAngle + orbitDireciton * math.pi / 2) * orbitSpeed,
-    }
-    local orbitingPosition = {
-      x = satellite.position.x + orbitingVelocity.x * dt,
-      y = satellite.position.y + orbitingVelocity.y * dt
-    }
+    local surfaceDirection = orbitAngle + orbitDireciton * math.pi / 2
+    local orbitingVelocity = b.vec2(math.cos(surfaceDirection), math.sin(surfaceDirection)) * orbitSpeed
+    local orbitingPosition = satellite.position + orbitingVelocity * dt
 
-    local orbitingDistance = math.sqrt(
-      (orbitingPosition.x - planet.position.x) ^ 2 + (orbitingPosition.y - planet.position.y) ^ 2
-    )
-
-    local normalDistance = math.sqrt(
-      (newPosition.x - planet.position.x) ^ 2 + (newPosition.y - planet.position.y) ^ 2
-    )
+    local orbitingDistance = (orbitingPosition - planet.position):length()
+    local normalDistance = (newPosition - planet.position):length()
 
     if orbitingDistance > normalDistance then
       newVelocity = orbitingVelocity
@@ -293,10 +240,8 @@ local function updateSatellite(satellite, dt)
 end
 
 local function sample(satellite)
-  local sampled = copy(satellite)
-  local speed = math.floor(math.sqrt(
-    satellite.velocity.x ^ 2 + satellite.velocity.y ^ 2
-  ))
+  local sampled = b.table.deep_copy(satellite)
+  local speed = math.floor(satellite.velocity:length())
   local sampleCount = 20
   if speed >= 0.1 then
     sampled.thrust = 0
@@ -311,16 +256,12 @@ local function sample(satellite)
   for n = 1, sampleCount do
     updateSatellite(sampled, 0.2)
     for _, planet in ipairs(planets) do
-      local diff = {
-        x = planet.position.x - sampled.position.x,
-        y = planet.position.y - sampled.position.y
-      }
-      local distance = math.sqrt(diff.x ^ 2 + diff.y ^ 2)
+      local distance = (planet.position - sampled.position):length()
       if distance < planet.radius + orbit then
         return samples
       end
     end
-    table.insert(samples, { x = math.floor(sampled.position.x), y = math.floor(sampled.position.y) })
+    table.insert(samples, sampled.position:floor())
   end
 
   return samples
@@ -344,9 +285,9 @@ function love.update(dt)
 
   local touches = love.touch.getTouches()
   if lk.isDown("up") or (joystick and joystick:isDown(1)) or #touches > 0 then
-    ship.thrust = lerp(ship.thrust, maxThrust, 0.1)
+    ship.thrust = b.math.lerp(ship.thrust, maxThrust, 0.1)
   else
-    ship.thrust = lerp(ship.thrust, 0, 0.2)
+    ship.thrust = b.math.lerp(ship.thrust, 0, 0.2)
   end
 
   if ship.thrust > 0.1 then
@@ -360,10 +301,7 @@ function love.update(dt)
 
   for _, bhole in ipairs(planets) do
     if bhole.blackHole then
-      local distance = math.sqrt(
-        (bhole.position.x - ship.position.x)^2 +
-        (bhole.position.y - ship.position.y)^2
-      )
+      local distance = (bhole.position - ship.position):length()
 
       if distance < 1000 then
         sounds.bhole:setVolume((1000 - distance) / 1000)
@@ -374,24 +312,17 @@ function love.update(dt)
 
   if ship.orbiting then
     local planet = planets[ship.orbitingPlanet]
-    local orbitVector = {
-      x = planet.position.x - ship.position.x,
-      y = planet.position.y - ship.position.y
-    }
-    local distance = math.sqrt(orbitVector.x ^ 2 + orbitVector.y ^ 2)
+    local distance = (planet.position - ship.position):length()
 
     if distance > ship.radius + planet.radius + orbit + 10 then
       ship.orbiting = false
     end
   else
     for planetIndex, planet in ipairs(planets) do
-      local orbitVector = {
-        x = planet.position.x - ship.position.x,
-        y = planet.position.y - ship.position.y
-      }
-      local distance = math.sqrt(orbitVector.x ^ 2 + orbitVector.y ^ 2)
-      local approachAngle = vangle(orbitVector, ship.velocity)
-      local speed = math.sqrt(ship.velocity.x ^ 2 + ship.velocity.y ^ 2)
+      local orbitVector = planet.position - ship.position
+      local distance = orbitVector:length()
+      local approachAngle = orbitVector:angle_difference(ship.velocity)
+      local speed = ship.velocity:length()
 
       if not planet.blackHole and distance <= ship.radius + planet.radius + orbit then
         if math.abs(approachAngle) < 10 and speed > 300 then
@@ -399,10 +330,7 @@ function love.update(dt)
         end
         ship.orbiting = true
         ship.orbitingPlanet = planetIndex
-        ship.velocity = {
-          x = ship.velocity.x * 0.8,
-          y = ship.velocity.y * 0.8
-        }
+        ship.velocity = ship.velocity * 0.8
         if planetIndex == currentDestination.planet then
           points = points + currentDestination.points
           sounds.oneup:play()
@@ -418,26 +346,22 @@ function love.update(dt)
 
   trajectory = sample(ship)
 
-  local speed = math.floor(math.sqrt(
-    ship.velocity.x ^ 2 + ship.velocity.y ^ 2
-  ))
+  local speed = math.floor(ship.velocity:length())
 
   local velocityAngle
   if #trajectory == 0 or speed >= 0.1 then
-    velocityAngle = math.atan2(ship.velocity.y, ship.velocity.x)
+    velocityAngle = ship.velocity:angle()
   else
-    local lastTrajectory = trajectory[#trajectory]
-    local diff = {
-      x = lastTrajectory.x - ship.position.x,
-      y = lastTrajectory.y - ship.position.y
-    }
-    speed = math.sqrt(diff.x ^ 2 + diff.y ^ 2)
+    local lastTrajectory = b.table.back(trajectory)
+    local diff = lastTrajectory - ship.position
+    speed = diff:length()
 
-    velocityAngle = math.atan2(diff.y, diff.x)
+    velocityAngle = diff:angle()
   end
 
   if speed >= 0.1 then
-    ship.turnAngle = velocityAngle -- math.atan2(ship.turnAngle, velocityAngle, 0.3)
+    ship.turnAngle = velocityAngle
+    -- ship.turnAngle = b.math.lerp(ship.turnAngle, velocityAngle, 0.3)
   end
 end
 
@@ -449,40 +373,24 @@ function love.keypressed(key)
   end
 end
 
-local function cullBy(entity, container)
-  local result = {
-    x = clamp(0, entity.x, container.width),
-    y = clamp(0, entity.y, container.height),
-    culled = false
-  }
+local function cullBy(vector, container)
+  local culled = false
+  local newVector = vector:clamp(b.vec2(0, 0), b.vec2(container.width, container.height))
 
-  if result.x ~= entity.x or result.y ~= entity.y then
-    result.culled = true
+  if newVector.x ~= vector.x or newVector.y ~= vector.y then
+    culled = true
   end
 
-  return result
+  return newVector, culled
 end
 
 function love.draw()
   local planet = planets[currentDestination.planet]
+  local destinationVector = planet.position - ship.position
+  local destinationDistance = destinationVector:length()
+  local destinationDirection = destinationVector:normalize()
 
-  local destinationVector = {
-    x = planet.position.x - ship.position.x,
-    y = planet.position.y - ship.position.y
-  }
-
-  local destinationDistance = math.sqrt(
-    destinationVector.x ^ 2 + destinationVector.y ^ 2
-  )
-
-  local destinationDirection = {
-    x = destinationVector.x / destinationDistance,
-    y = destinationVector.y / destinationDistance
-  }
-
-  local speed = math.floor(math.sqrt(
-    ship.velocity.x ^ 2 + ship.velocity.y ^ 2
-  ))
+  local speed = math.floor(ship.velocity:length())
 
   lg.push()
   lg.translate(-ship.position.x + lg.getWidth() / 2, -ship.position.y + lg.getHeight() / 2)
@@ -519,12 +427,10 @@ function love.draw()
   if not destinationVisible then
     lg.setColor(0, 1, 0, 0.7)
     lg.push()
-    lg.translate(
-      ship.position.x + destinationDirection.x * ship.radius * 16,
-      ship.position.y + destinationDirection.y * ship.radius * 16
-    )
+    local arrowPosition = ship.position + destinationDirection * ship.radius * 16
+    lg.translate(arrowPosition.x, arrowPosition.y)
     lg.print(string.format("%5.2f", destinationDistance / 100), ship.radius * 3, 0)
-    lg.rotate(math.atan2(destinationDirection.y, destinationDirection.x))
+    lg.rotate(destinationDirection:angle())
 
     lg.polygon(
       "fill",
@@ -623,8 +529,8 @@ function love.draw()
     end
   end
   lg.setColor(0, 1, 0)
-  local shipPosition = cullBy(ship.position, map)
-  if shipPosition.culled then
+  local shipPosition, shipPositionCulled = cullBy(ship.position, map)
+  if shipPositionCulled then
     lg.polygon(
       "fill",
       minimap.x + shipPosition.x * minimap.scale - 4,
@@ -650,8 +556,8 @@ function love.draw()
   lg.setColor(1, 1, 1)
   for sampleIndex, samplePoint in ipairs(trajectory) do
     if sampleIndex % 4 == 0 then
-      local pointPosition = cullBy(samplePoint, map)
-      if not pointPosition.culled then
+      local pointPosition, pointPositionCulled = cullBy(samplePoint, map)
+      if not pointPositionCulled then
         lg.points(
           minimap.x + pointPosition.x * minimap.scale,
           minimap.y + pointPosition.y * minimap.scale
