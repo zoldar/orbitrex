@@ -1,6 +1,7 @@
 local debug
 local fonts
 local joystick
+local planetTemplates
 local planets
 local ship
 local maxThrust
@@ -49,14 +50,7 @@ local function setNewDestination()
   currentDestination.start = lt.getTime()
 end
 
-function love.load()
-  debug  = false
-
-  fonts  = {
-    label = lg.newFont(14),
-    value = lg.newFont(18)
-  }
-
+local function loadAssets()
   sounds = {
     burn = love.audio.newSource("assets/engine.wav", "static"),
     oneup = love.audio.newSource("assets/oneup.wav", "static"),
@@ -74,55 +68,13 @@ function love.load()
   sounds.bhole:setLooping(true)
   sounds.bhole:play()
 
-  local joysticks = love.joystick.getJoysticks()
-  joystick = joysticks[1]
-
-  points = 0
-  lowPointsThreshold = 400
-  maxThrust = 175
-  friction = 70
-  orbit = 20
-  currentDestination = {}
-
-  map = {
-    width = 8000,
-    height = 2000
+  fonts = {
+    label = lg.newFont(14),
+    value = lg.newFont(18)
   }
+end
 
-  -- repetition reflects odds
-  local planetTemplates = {
-    {
-      radius = 30,
-      mass = 1500000,
-      minDistance = 1000
-    },
-    {
-      radius = 60,
-      mass = 3000000,
-      minDistance = 700
-    },
-    {
-      radius = 60,
-      mass = 3000000,
-      minDistance = 700
-    },
-    {
-      radius = 60,
-      mass = 3000000,
-      minDistance = 700
-    },
-    {
-      radius = 80,
-      mass = 4000000,
-      minDistance = 600
-    },
-    {
-      radius = 80,
-      mass = 4000000,
-      minDistance = 600
-    },
-  }
-
+local function generateMap()
   planets = {}
 
   -- put 2 black holes on the map
@@ -172,7 +124,13 @@ function love.load()
       end
     end
   end
+end
 
+local function reset()
+  generateMap()
+
+  points = 0
+  currentDestination = {}
   local lastPlanet = b.table.back(planets)
 
   ship = {
@@ -180,8 +138,8 @@ function love.load()
     velocity = b.vec2(0, -200),
     turnAngle = math.pi / 4,
     thrust = 0,
-    radius = 10,
-    mass = 1,
+    radius = ship.radius,
+    mass = ship.mass,
     orbiting = false,
     orbitingPlanet = nil,
     fuel = 100
@@ -190,6 +148,66 @@ function love.load()
   trajectory = {}
 
   setNewDestination()
+end
+
+function love.load()
+  debug = false
+
+  loadAssets()
+
+  local joysticks = love.joystick.getJoysticks()
+  joystick = joysticks[1]
+
+  lowPointsThreshold = 400
+  maxThrust = 175
+  friction = 70
+  orbit = 20
+
+  ship = {
+    mass = 1,
+    radius = 10
+  }
+
+  map = {
+    width = 8000,
+    height = 2000
+  }
+
+  -- repetition reflects odds
+  planetTemplates = {
+    {
+      radius = 30,
+      mass = 1500000,
+      minDistance = 1000
+    },
+    {
+      radius = 60,
+      mass = 3000000,
+      minDistance = 700
+    },
+    {
+      radius = 60,
+      mass = 3000000,
+      minDistance = 700
+    },
+    {
+      radius = 60,
+      mass = 3000000,
+      minDistance = 700
+    },
+    {
+      radius = 80,
+      mass = 4000000,
+      minDistance = 600
+    },
+    {
+      radius = 80,
+      mass = 4000000,
+      minDistance = 600
+    },
+  }
+
+  reset()
 end
 
 local function getGravity(centralBody, satelliteBody)
