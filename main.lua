@@ -1,6 +1,8 @@
 local debug
+local time
 local fonts
 local sounds
+local shaders
 local joystick
 local baseShip
 local map
@@ -127,6 +129,7 @@ end
 local function reset()
   generateMap()
 
+  time = 0
   points = 0
   currentDestination = {}
   local lastPlanet = b.table.back(planets)
@@ -243,6 +246,7 @@ local function sample(satellite, sampleCount)
 end
 
 function love.update(dt)
+  time = time + dt
   local now = lt.getTime()
 
   if now - currentDestination.start >= 3 then
@@ -329,6 +333,7 @@ local function cullBy(vector, container)
 end
 
 function love.draw()
+  lg.setBackgroundColor(2 / 255, 6 / 255, 18 / 255)
   local planet = planets[currentDestination.planet]
   local destinationVector = planet.position - ship.position
   local destinationDistance = destinationVector:length()
@@ -434,7 +439,7 @@ function love.draw()
       local show = true
       if planetIndex == currentDestination.planet then
         lg.setColor(1, 1, 0)
-        if currentDestination.points < lowPointsThreshold and math.sin(math.pi * lt.getTime() * 4) > 0 then
+        if currentDestination.points < lowPointsThreshold and math.sin(math.pi * time * 4) > 0 then
           show = false
         end
       else
