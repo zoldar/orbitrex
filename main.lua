@@ -230,9 +230,7 @@ end
 
 local function sample(satellite, sampleCount)
   local sampled = b.table.deep_copy(satellite)
-  local speed = math.floor(satellite.velocity:length())
   sampled.thrust = 0
-  sampled.orbiting = false
 
   local samples = {}
   for n = 1, sampleCount do
