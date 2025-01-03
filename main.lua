@@ -71,6 +71,10 @@ local function loadAssets()
     label = lg.newFont(14),
     value = lg.newFont(18)
   }
+
+  shaders = {
+    planet = lg.newShader("planet.glsl")
+  }
 end
 
 local function generateMap()
@@ -346,7 +350,18 @@ function love.draw()
   for planetIndex, planet in ipairs(planets) do
     if planet.orbitable then
       lg.setColor(0, 1, 1)
+
+      -- shader
+      shaders.planet:send("iTime", time)
+      shaders.planet:send("iResolution", { planet.radius * 2, planet.radius * 2, 1 })
+      shaders.planet:send("iCenter", {
+        planet.position.x - planet.radius - ship.position.x + lg.getWidth() / 2,
+        planet.position.y - planet.radius - ship.position.y + lg.getHeight() / 2,
+        1
+      })
+      lg.setShader(shaders.planet)
       lg.circle("fill", planet.position.x, planet.position.y, planet.radius)
+      lg.setShader()
     else
       lg.setColor(0, 0.4, 0.4)
       local currentRadius = 10
