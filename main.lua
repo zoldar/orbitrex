@@ -90,7 +90,7 @@ local function generateMap()
     table.insert(planets, {
       orbitable = false,
       position = position,
-      mass = 20000000,
+      mass = 17000000,
       radius = 120,
       orbit = 0,
       minDistance = 1000
@@ -170,7 +170,7 @@ function love.load()
   baseShip = {
     mass = 1,
     radius = 10,
-    friction = 70,
+    friction = 80,
     maxThrust = 175
   }
 
