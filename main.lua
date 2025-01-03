@@ -403,6 +403,11 @@ function love.draw()
     lg.pop()
   end
 
+  lg.setColor(0, 1, 0, 0.4)
+  for _, point in ipairs(trajectory) do
+    lg.circle("line", point.x, point.y, 2)
+  end
+
   lg.push()
   lg.translate(ship.position.x, ship.position.y)
 
@@ -427,11 +432,6 @@ function love.draw()
     )
   end
   lg.pop()
-
-  lg.setColor(1, 1, 1)
-  for _, point in ipairs(trajectory) do
-    lg.points(point.x, point.y)
-  end
 
   lg.pop()
 
