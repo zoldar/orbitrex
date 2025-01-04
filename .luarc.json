@@ -1,6 +1,9 @@
 {
-  "runtime.version": "Lua 5.1",
-  "workspace.library": [
-    "../love2d-hints"
-  ]
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime.version": "LuaJIT",
+  "hint.enable": false,
+  "diagnostics.globals": ["love", "batteries"],
+  "workspace.library": ["../love2d-hints"],
+  "Lua.workspace.ignoreDir": ["lib"],
+  "completion.autoRequire": false
 }
