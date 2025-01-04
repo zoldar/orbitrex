@@ -12,7 +12,7 @@ local function getGravity(centralBody, satelliteBody)
 end
 
 function _M.updateSatellite(satellite, bodies, dt)
-  local direction = satellite.turnDirection
+  local direction = satellite.velocity:normalise()
 
   local pull = b.vec2()
   for _, body in ipairs(bodies) do
@@ -45,7 +45,7 @@ function _M.updateSatellite(satellite, bodies, dt)
       if satellite.thrust > 0.1 then
         orbitSpeed = math.max(math.sqrt(body.mass / distance), satellite.velocity:length())
       else
-        orbitSpeed = math.sqrt(body.mass / distance) - 10
+        orbitSpeed = math.sqrt(body.mass / distance)
       end
       local orbitingVelocity = surfaceDirection * orbitSpeed
       local orbitingPosition = satellite.position + orbitingVelocity * dt
