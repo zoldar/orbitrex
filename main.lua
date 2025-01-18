@@ -232,9 +232,12 @@ local function sample(satellite, sampleCount)
   local sampled = b.table.deep_copy(satellite)
   sampled.thrust = 0
 
+  local start = math.ceil(time * 5) / 5
+  local diff = start - time
   local samples = {}
   for n = 1, sampleCount do
-    physics.updateSatellite(sampled, planets, 0.2)
+    local step = n == 1 and diff or 0.2
+    physics.updateSatellite(sampled, planets, step)
     for _, planet in ipairs(planets) do
       local distance = (planet.position - sampled.position):length()
       if distance < planet.radius + planet.orbit then
@@ -310,7 +313,11 @@ function love.update(dt)
     end
   end
 
-  trajectory = sample(ship, 20)
+  if not ship.orbiting or ship.thrust > ship.maxThrust * 0.9 then
+    trajectory = sample(ship, 20)
+  else
+    trajectory = {}
+  end
 
   ship.turnDirection = b.math.lerp(ship.turnDirection, ship.velocity:normalise(), 0.3)
 end
